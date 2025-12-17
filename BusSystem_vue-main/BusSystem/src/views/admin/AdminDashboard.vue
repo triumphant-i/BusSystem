@@ -122,11 +122,16 @@ const stationForm = ref({ id: '', name: '' });
 const loadStations = async () => {
   try {
     const res = await getAllStations();
-    // 强制修正：如果后端返回的是对象里包数组，尝试取一下，防止 array 报错
-    stationList.value = Array.isArray(res) ? res : [];
+    const rawList = Array.isArray(res) ? res : [];
+    
+    // 强制映射字段，处理后端 SnakeCase (station_id) 到前端 CamelCase (stationId) 的不一致
+    stationList.value = rawList.map(s => ({
+      ...s,
+      stationId: s.stationId || s.station_id,
+      stationName: s.stationName || s.station_name
+    }));
   } catch (e) { console.error(e); }
 };
-
 const openStationDialog = () => { stationForm.value = {id: '', name: ''}; stationDialogVisible.value = true; };
 const submitStation = async () => {
   await addStation(stationForm.value.id, stationForm.value.name);
@@ -148,7 +153,19 @@ const lineForm = ref({});
 const loadLines = async () => {
   try {
     const res = await getAllRoutes();
-    lineList.value = Array.isArray(res) ? res : [];
+	const rawList = Array.isArray(res) ? res : [];
+    
+    // --- 添加映射逻辑 ---
+    lineList.value = rawList.map(r => ({
+      ...r,
+      // 优先取蛇形命名(后端返回)，如果没有则取驼峰(防止后端改回去了)
+      lineOrder: r.line_order !== undefined ? r.line_order : r.lineOrder,
+      lineName: r.line_name || r.lineName,
+      direction: r.direction, 
+      startTime: r.start_time || r.startTime || r.st, // 兼容 st 字段
+      finishTime: r.finish_time || r.finishTime || r.ft, // 兼容 ft 字段
+      intervalTime: r.interval_time !== undefined ? r.interval_time : r.intervalTime
+    }));
   } catch (e) { console.error(e); }
 };
 

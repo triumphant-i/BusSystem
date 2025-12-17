@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 /**
  * 核心算法服务
- * 对应 try_open.py 中的 find_routes_between 和 load_data
+ * 负责路径规划（直达+换乘）及数据缓存
  */
 @Service
 public class PathFindingService {
@@ -26,7 +26,7 @@ public class PathFindingService {
     @Autowired private RoadRepository roadRepo;
     @Autowired private LineStationRepository lineStationRepo;
 
-    // 内存缓存 (模拟 Python 中的全局字典)
+    // --- 内存缓存 ---
     private Map<Integer, Station> stationMap = new HashMap<>();
     private Map<Integer, Road> roadMap = new HashMap<>();
     // 线路ID -> 站点ID有序列表
@@ -35,8 +35,7 @@ public class PathFindingService {
     private Map<Integer, Set<Integer>> stationToLinesMap = new HashMap<>();
 
     /**
-     * 初始化加载数据到内存 (对应 load_data)
-     * 每次修改数据(增删改)后应当重新调用此方法刷新缓存
+     * 初始化加载数据到内存
      */
     @PostConstruct
     public synchronized void loadData() {
@@ -60,7 +59,6 @@ public class PathFindingService {
 
         // 3. 加载线路-站点关系 (按顺序)
         List<LineStation> relations = lineStationRepo.findAll();
-        // 确保按 lineOrder 和 sequenceNo 排序
         relations.sort(Comparator.comparingInt(LineStation::getLineOrder)
                 .thenComparingInt(LineStation::getSequenceNo));
 
@@ -74,52 +72,49 @@ public class PathFindingService {
             stationToLinesMap.computeIfAbsent(sid, k -> new HashSet<>()).add(lid);
         }
 
-        System.out.println("数据已加载到内存: 站点=" + stationMap.size() + ", 线路=" + roadMap.size());
+        System.out.println("PathFindingService 数据已加载: 站点=" + stationMap.size() + ", 线路=" + roadMap.size());
     }
 
     /**
-     * 核心路径规划算法
+     * 核心路径规划入口
      */
     public List<RouteResultDTO> findRoutes(String startStr, String endStr, int maxTransfers) {
         Integer startSid = parseStationId(startStr);
         Integer endSid = parseStationId(endStr);
 
+        // 基本校验
         if (startSid == null || endSid == null) return Collections.emptyList();
         if (startSid.equals(endSid)) return Collections.emptyList();
 
         List<RouteResultDTO> candidates = new ArrayList<>();
 
-        // 1. 直达 (0次换乘)
+        // 1. 搜索直达方案 (0次换乘)
         findDirectRoutes(startSid, endSid, candidates);
 
-        // 2. 换乘逻辑 (1次或2次)
-        // 这里的逻辑对应 Python 中的 dfs_build
+        // 2. 搜索换乘方案 (如果允许)
         if (maxTransfers >= 1) {
             findTransferRoutes(startSid, endSid, maxTransfers, candidates);
         }
 
-        // 排序：优先换乘少，其次总站数少
-        candidates.sort(Comparator.comparingInt(RouteResultDTO::getTransfers)
-                .thenComparingInt(RouteResultDTO::getTotalStops));
-
-        // 简单去重 (基于线路序列)
+        // 去重并排序返回
         return deduplicate(candidates);
     }
 
-    // --- 辅助算法方法 ---
+    // --- 内部算法实现 ---
 
     private void findDirectRoutes(Integer start, Integer end, List<RouteResultDTO> results) {
         Set<Integer> startLines = stationToLinesMap.getOrDefault(start, Collections.emptySet());
         for (Integer lid : startLines) {
             List<Integer> seq = lineToStationsMap.get(lid);
+            // 如果该线路同时也包含终点
             if (seq.contains(end)) {
+                // 构建路径：仅包含这一条线路
                 RouteResultDTO route = createRoute(Collections.singletonList(lid), Arrays.asList(start, end));
                 if (route != null) results.add(route);
             }
         }
     }
 
-    // 简化的BFS/DFS搜索，寻找线路序列
     private void findTransferRoutes(Integer start, Integer end, int maxTransfers, List<RouteResultDTO> results) {
         Set<Integer> startLines = stationToLinesMap.getOrDefault(start, Collections.emptySet());
         Set<Integer> endLines = stationToLinesMap.getOrDefault(end, Collections.emptySet());
@@ -127,7 +122,7 @@ public class PathFindingService {
         // 限制递归深度：线路数量 = 换乘次数 + 1
         int maxLines = maxTransfers + 1;
 
-        // BFS 搜索线路路径: List<Integer> 表示线路ID序列
+        // Queue 中存储的是线路ID的序列
         Queue<List<Integer>> queue = new LinkedList<>();
         for (Integer sl : startLines) {
             List<Integer> path = new ArrayList<>();
@@ -137,12 +132,11 @@ public class PathFindingService {
 
         while (!queue.isEmpty()) {
             List<Integer> path = queue.poll();
-            if (path.size() >= maxLines) continue; // 达到深度限制，不能再扩展
+            if (path.size() >= maxLines) continue;
 
             Integer lastLineId = path.get(path.size() - 1);
             List<Integer> lastLineStations = lineToStationsMap.get(lastLineId);
 
-            // 找到与当前线路有交集的所有线路
             Set<Integer> nextLines = new HashSet<>();
             for (Integer sid : lastLineStations) {
                 Set<Integer> linesAtStation = stationToLinesMap.getOrDefault(sid, Collections.emptySet());
@@ -150,17 +144,14 @@ public class PathFindingService {
             }
 
             for (Integer nextLineId : nextLines) {
-                if (path.contains(nextLineId)) continue; // 防止回路
+                if (path.contains(nextLineId)) continue;
 
                 List<Integer> newPath = new ArrayList<>(path);
                 newPath.add(nextLineId);
 
-                // 如果这条新线路能到达终点 (即 nextLineId 在 endLines 中)
                 if (endLines.contains(nextLineId)) {
-                    // 构建具体的换乘方案
                     buildAndAddRoutes(newPath, start, end, results);
                 } else {
-                    // 如果还没到最大深度，继续入队
                     if (newPath.size() < maxLines) {
                         queue.add(newPath);
                     }
@@ -169,11 +160,7 @@ public class PathFindingService {
         }
     }
 
-    // 根据线路序列构建详细路径 (需要找到具体的换乘站)
     private void buildAndAddRoutes(List<Integer> linePath, Integer start, Integer end, List<RouteResultDTO> results) {
-        // 这是一个简化版实现，对于每一对相邻线路，找到第一个公共站点作为换乘点
-        // Python版逻辑更复杂，枚举了所有可能的换乘站组合。这里为了代码简洁，取第一个交点。
-
         List<Integer> transferStations = new ArrayList<>();
         transferStations.add(start);
 
@@ -181,13 +168,15 @@ public class PathFindingService {
             Integer l1 = linePath.get(i);
             Integer l2 = linePath.get(i+1);
 
-            // 找交集
             Set<Integer> stations1 = new HashSet<>(lineToStationsMap.get(l1));
             Set<Integer> stations2 = new HashSet<>(lineToStationsMap.get(l2));
-            stations1.retainAll(stations2);
 
-            if (stations1.isEmpty()) return; // 无交点，理论上不会发生
-            transferStations.add(stations1.iterator().next()); // 取任意一个换乘点
+            stations1.retainAll(stations2); // 取交集
+
+            if (stations1.isEmpty()) return;
+
+            // 取第一个交点作为换乘站
+            transferStations.add(stations1.iterator().next());
         }
         transferStations.add(end);
 
@@ -198,8 +187,10 @@ public class PathFindingService {
     private RouteResultDTO createRoute(List<Integer> lines, List<Integer> transferPoints) {
         RouteResultDTO dto = new RouteResultDTO();
         dto.setTransfers(lines.size() - 1);
+
         List<SegmentDTO> segments = new ArrayList<>();
         int totalStops = 0;
+        int totalDuration = 0;
 
         for (int i = 0; i < lines.size(); i++) {
             Integer lid = lines.get(i);
@@ -220,20 +211,36 @@ public class PathFindingService {
                 Collections.reverse(subList);
             }
 
+            Road road = roadMap.get(lid);
             SegmentDTO seg = new SegmentDTO();
             seg.setLineOrder(lid);
-            seg.setLineName(roadMap.get(lid).getLineName());
+            seg.setLineName(road.getLineName());
             seg.setFromSid(from);
             seg.setToSid(to);
             seg.setStations(subList);
             seg.setStopsCount(Math.abs(idxTo - idxFrom));
 
+            // [逻辑修改] 填充 stationDetails 供前端地图绘制使用
+            // 必须保留这段，否则前端画不出折线和换乘点名
+            List<Station> details = subList.stream()
+                    .map(sid -> stationMap.get(sid))
+                    .collect(Collectors.toList());
+            seg.setStationDetails(details);
+
+            int interval = (road.getIntervalTime() != null && road.getIntervalTime() > 0) ? road.getIntervalTime() : 5;
+            int segTime = seg.getStopsCount() * interval;
+            seg.setSegmentDuration(segTime);
+
             segments.add(seg);
             totalStops += seg.getStopsCount();
+            totalDuration += segTime;
         }
 
+        int transferPenalty = dto.getTransfers() * 10;
+        dto.setDuration(totalDuration + transferPenalty);
         dto.setSegments(segments);
         dto.setTotalStops(totalStops);
+        dto.setRouteId(UUID.randomUUID().toString()); // 生成一个唯一ID
         return dto;
     }
 
@@ -243,20 +250,55 @@ public class PathFindingService {
             Integer id = Integer.parseInt(query);
             if (stationMap.containsKey(id)) return id;
         }
-        // 模糊匹配，取第一个
         for (Station s : stationMap.values()) {
             if (s.getStationName().contains(query)) return s.getStationId();
         }
         return null;
     }
 
-    // 简单的列表去重
+    /**
+     * [逻辑修复] 真正的去重逻辑
+     * 防止出现两个完全一样的方案
+     */
     private List<RouteResultDTO> deduplicate(List<RouteResultDTO> list) {
-        // 实际生产中可以用Set + hashcode去重，这里直接返回
-        return list.stream().limit(10).collect(Collectors.toList());
+        if (list == null || list.isEmpty()) return list;
+
+        // 使用 Set 记录已经出现过的“路线签名”
+        Set<String> signatures = new HashSet<>();
+        List<RouteResultDTO> uniqueList = new ArrayList<>();
+
+        for (RouteResultDTO route : list) {
+            String sig = generateSignature(route);
+            if (!signatures.contains(sig)) {
+                signatures.add(sig);
+                uniqueList.add(route);
+            }
+        }
+
+        // 排序：时间短 > 换乘少
+        return uniqueList.stream()
+                .sorted(Comparator.comparingInt(RouteResultDTO::getDuration)
+                        .thenComparingInt(RouteResultDTO::getTransfers))
+                .limit(10) // 只取前10
+                .collect(Collectors.toList());
     }
 
-    // Getter for controllers to use cache
+    /**
+     * 生成路线签名：线路名 + 经过的站点序列
+     * 如果两个方案线路名一样，且经过的站点ID序列也完全一样，则视为重复
+     */
+    private String generateSignature(RouteResultDTO route) {
+        StringBuilder sb = new StringBuilder();
+        if (route.getSegments() != null) {
+            for (SegmentDTO seg : route.getSegments()) {
+                sb.append(seg.getLineName()).append(":"); // 线路名
+                sb.append(seg.getStations().toString()).append("|"); // 站点ID序列
+            }
+        }
+        return sb.toString();
+    }
+
+    // --- Getters ---
     public Map<Integer, Station> getStationMap() { return stationMap; }
     public Map<Integer, Road> getRoadMap() { return roadMap; }
     public Map<Integer, List<Integer>> getLineToStationsMap() { return lineToStationsMap; }
