@@ -1,0 +1,523 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "OpenAPI definition",
+    "version": "v0"
+  },
+  "servers": [
+    {
+      "url": "http://10.83.154.185:8080",
+      "description": "Generated server url"
+    }
+  ],
+  "tags": [
+    {
+      "name": "公交查询模块",
+      "description": "包含站点查询、线路查询及路径规划"
+    }
+  ],
+  "paths": {
+    "/api/admin/station": {
+      "post": {
+        "tags": [
+          "bus-admin-controller"
+        ],
+        "operationId": "addStation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/line": {
+      "post": {
+        "tags": [
+          "bus-admin-controller"
+        ],
+        "operationId": "addLine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stations": {
+      "get": {
+        "tags": [
+          "公交查询模块"
+        ],
+        "summary": "获取所有站点",
+        "description": "返回地图上所有的站点列表",
+        "operationId": "getAllStations",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Station"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stations/search": {
+      "get": {
+        "tags": [
+          "公交查询模块"
+        ],
+        "summary": "搜索站点",
+        "description": "支持 ID 精确查询 或 名称模糊查询",
+        "operationId": "findStations",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "站点ID(数字) 或 站点名称(中文)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Station"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/station/{identifier}/lines": {
+      "get": {
+        "tags": [
+          "公交查询模块"
+        ],
+        "summary": "查询某站点的经过线路",
+        "description": "点击某个站点时，显示经过该站的所有公交线",
+        "operationId": "getLinesByStation",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "description": "站点ID 或 站点名称",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Road"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routes": {
+      "get": {
+        "tags": [
+          "公交查询模块"
+        ],
+        "summary": "获取所有线路",
+        "description": "返回所有公交线路信息",
+        "operationId": "getAllRoutes",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Road"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routes/plan": {
+      "get": {
+        "tags": [
+          "公交查询模块"
+        ],
+        "summary": "🚀 路径规划核心接口",
+        "description": "前端输入起点终点，后端计算最优换乘",
+        "operationId": "planRoute",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "description": "起点（名称或ID）",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "description": "终点（名称或ID）",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxTransfers",
+            "in": "query",
+            "description": "最大换乘次数",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 2
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RouteResultDTO"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/line/{identifier}/stations": {
+      "get": {
+        "tags": [
+          "公交查询模块"
+        ],
+        "summary": "查询某线路的所有站点",
+        "description": "查看某条公交线（如1路）具体经过哪些站",
+        "operationId": "getStationsByLine",
+        "parameters": [
+          {
+            "name": "identifier",
+            "in": "path",
+            "description": "线路ID 或 线路名称",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Station"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/station/{id}": {
+      "delete": {
+        "tags": [
+          "bus-admin-controller"
+        ],
+        "operationId": "deleteStation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/line/{id}": {
+      "delete": {
+        "tags": [
+          "bus-admin-controller"
+        ],
+        "operationId": "deleteLine",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Station": {
+        "type": "object",
+        "properties": {
+          "stationId": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          },
+          "stationName": {
+            "type": "string",
+            "refType": null
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "refType": null
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "refType": null
+          }
+        }
+      },
+      "Road": {
+        "type": "object",
+        "properties": {
+          "lineOrder": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          },
+          "lineName": {
+            "type": "string",
+            "refType": null
+          },
+          "direction": {
+            "type": "string",
+            "refType": null
+          },
+          "startTime": {
+            "type": "string",
+            "format": "date-time",
+            "refType": null
+          },
+          "finishTime": {
+            "type": "string",
+            "format": "date-time",
+            "refType": null
+          },
+          "intervalTime": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          },
+          "stationIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "refType": "integer"
+          }
+        }
+      },
+      "RouteResultDTO": {
+        "type": "object",
+        "properties": {
+          "routeId": {
+            "type": "string",
+            "description": "路线唯一ID",
+            "refType": null
+          },
+          "duration": {
+            "type": "integer",
+            "description": "预计耗时(分钟)",
+            "format": "int32",
+            "refType": null
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SegmentDTO"
+            },
+            "refType": "SegmentDTO"
+          },
+          "transfers": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          },
+          "totalStops": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          }
+        }
+      },
+      "SegmentDTO": {
+        "type": "object",
+        "properties": {
+          "lineOrder": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          },
+          "lineName": {
+            "type": "string",
+            "refType": null
+          },
+          "fromSid": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          },
+          "toSid": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          },
+          "stations": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "refType": "integer"
+          },
+          "stopsCount": {
+            "type": "integer",
+            "format": "int32",
+            "refType": null
+          }
+        }
+      }
+    }
+  },
+  "x-openapi": {
+    "x-markdownFiles": []
+  }
+}
