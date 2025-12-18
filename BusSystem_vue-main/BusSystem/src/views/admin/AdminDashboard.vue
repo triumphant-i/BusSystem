@@ -150,6 +150,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { getAllStations, searchStations as apiSearchStations, addStation, updateStation, deleteStation, getAllRoutes, addLine, updateLine, deleteLine } from '@/api/bus';
 import { ElMessage } from 'element-plus';
+
 const activeTab = ref('stations');
 const searchKeyword = ref('');
 
@@ -160,23 +161,29 @@ const stationMode = ref('add'); // 'add' or 'edit'
 const stationForm = ref({ id: '', name: '' });
 const lineSearchMode = ref('all'); // 搜索模式：all, id, name
 
+// 【兼容修复】站点数据清洗
+// 保证拿到 stationId 和 stationName
+const mapStationData = (rawList) => {
+  return (rawList || []).map(s => ({
+    ...s,
+    stationId: s.stationId || s.station_id || s.id,
+    stationName: s.stationName || s.station_name || s.name,
+    longitude: s.longitude || s.lng,
+    latitude: s.latitude || s.lat
+  }));
+};
+
 const loadStations = async () => {
   try {
-    const res = await apiSearchStations(null); // 加载所有
-    const rawList = res.data || []; // 根据后端 Map 结构调整
-    stationList.value = rawList.map(s => ({
-      ...s,
-      stationId: s.stationId || s.station_id,
-      stationName: s.stationName || s.station_name
-    }));
+    const res = await apiSearchStations(null);
+    stationList.value = mapStationData(res.data);
   } catch (e) { console.error(e); }
 };
 
 const handleSearchStations = async () => {
   try {
     const res = await apiSearchStations(searchKeyword.value);
-    const rawList = res.data || [];
-    stationList.value = rawList.map(s => ({ ...s, stationId: s.stationId, stationName: s.stationName }));
+    stationList.value = mapStationData(res.data);
   } catch (e) { console.error(e); }
 }
 
@@ -201,7 +208,6 @@ const submitStation = async () => {
     res = await updateStation(id, name);
   }
 
-  // 解决问题3：根据后端返回的 success 字段判断
   if (res && res.success) {
     ElMessage.success(res.message);
     stationDialogVisible.value = false;
@@ -226,9 +232,8 @@ const lineList = ref([]);
 const lineDialogVisible = ref(false);
 const lineMode = ref('add');
 const lineForm = ref({});
-const lineSearchKeyword = ref(''); // 线路搜索关键字
+const lineSearchKeyword = ref(''); 
 
-// 计算属性，用于过滤线路列表
 const filteredLineList = computed(() => {
   if (!lineSearchKeyword.value) {
     return lineList.value;
@@ -240,9 +245,9 @@ const filteredLineList = computed(() => {
     const idMatch = String(line.lineOrder).includes(kw);
     const nameMatch = line.lineName && line.lineName.toLowerCase().includes(kw);
 
-    if (mode === 'id') return idMatch; // 仅匹配ID
-    if (mode === 'name') return nameMatch; // 仅匹配名称
-    return idMatch || nameMatch; // 默认全部
+    if (mode === 'id') return idMatch; 
+    if (mode === 'name') return nameMatch;
+    return idMatch || nameMatch; 
   });
 });
 
@@ -250,15 +255,17 @@ const loadLines = async () => {
   try {
     const res = await getAllRoutes();
     const rawList = Array.isArray(res) ? res : [];
+    
+    // 【兼容修复】线路数据清洗
     lineList.value = rawList.map(r => ({
       ...r,
-      lineOrder: r.line_order !== undefined ? r.line_order : r.lineOrder,
-      lineName: r.line_name || r.lineName,
+      lineOrder: r.lineOrder || r.line_order,
+      lineName: r.lineName || r.line_name,
       direction: r.direction, 
-      startTime: r.start_time || r.startTime || r.st,
-      finishTime: r.finish_time || r.finishTime || r.ft,
-      intervalTime: r.interval_time !== undefined ? r.interval_time : r.intervalTime,
-      stationIds: r.stationIds || [] // 假设后端返回了 stationIds，如果没有需要额外查
+      startTime: r.startTime || r.start_time || r.st,
+      finishTime: r.finishTime || r.finish_time || r.ft,
+      intervalTime: r.intervalTime !== undefined ? r.intervalTime : (r.interval_time || r.interval),
+      stationIds: r.stationIds || r.station_ids || []
     }));
   } catch (e) { console.error(e); }
 };

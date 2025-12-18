@@ -87,10 +87,10 @@
                     
                     <div class="seg-content">
                       <div class="bus-name">
-                        乘坐 <b :style="{ color: getLineColor(seg.lineName) }">{{ seg.lineName || seg.line_name || '未知线路' }}</b>
+                        乘坐 <b :style="{ color: getLineColor(seg.lineName) }">{{ seg.lineName || '未知线路' }}</b>
                       </div>
                       <div class="stop-count">
-                        经过 {{ seg.stopsCount || seg.stops_count || 0 }} 站
+                        经过 {{ seg.stopsCount || 0 }} 站
                         <span v-if="seg.stationDetails && seg.stationDetails.length">
                            ({{ getStationName(seg.stationDetails[0]) }} → {{ getStationName(seg.stationDetails[seg.stationDetails.length-1]) }})
                         </span>
@@ -137,23 +137,34 @@ const getLineColor = (str) => {
   return '#' + '00000'.substring(0, 6 - c.length) + c;
 };
 
-// 兼容获取站点名称（SnakeCase 或 CamelCase）
+// 【关键修复】：全方位兼容获取站点名称
+// 不管后端给 stationName, station_name 还是 name，通通拿下
 const getStationName = (s) => {
   if (!s) return '未知站点';
   return s.stationName || s.station_name || s.name || '';
+};
+
+// 【关键修复】：全方位兼容获取站点ID
+const getStationId = (s) => {
+  if (!s) return '';
+  return s.stationId || s.station_id || s.id || '';
 };
 
 const querySearch = async (queryString, cb) => {
   if (!queryString) { cb([]); return; }
   try {
     const res = await searchStations(queryString);
+    // 兼容后端返回结构：List 或 Map
     let list = Array.isArray(res) ? res : (res.data || res.content || []);
+    
+    // 【映射修复】构建自动补全列表
     const results = list.map(item => ({
-      value: getStationName(item),
-      id: item.station_id || item.stationId || item.id,
-      lat: parseFloat(item.latitude || 0),
-      lng: parseFloat(item.longitude || 0)
+      value: getStationName(item), // 调用兼容方法
+      id: getStationId(item),      // 调用兼容方法
+      lat: parseFloat(item.latitude || item.lat || 0),
+      lng: parseFloat(item.longitude || item.lng || 0)
     })).filter(r => r.value);
+    
     cb(results);
   } catch (e) { cb([]); }
 };
@@ -178,16 +189,26 @@ const handlePlan = async () => {
     const rawRes = await planRoute(startStation.value.value, endStation.value.value);
     const rawList = Array.isArray(rawRes) ? rawRes : [];
 
+    // 【映射修复】RouteResultDTO 强力兼容
     routes.value = rawList.map(r => ({
       ...r,
+      routeId: r.routeId || r.route_id,
       duration: r.duration,
-      totalStops: r.total_stops !== undefined ? r.total_stops : (r.totalStops || 0),
+      // 兼容 totalStops 和 total_stops
+      totalStops: r.totalStops !== undefined ? r.totalStops : (r.total_stops || 0),
       transfers: r.transfers || 0,
+      
+      // 处理分段信息
       segments: (Array.isArray(r.segments) ? r.segments : []).map(s => ({
         ...s,
-        lineName: s.line_name || s.lineName,
-        stopsCount: s.stops_count || s.stopsCount,
-        stationDetails: s.station_details || s.stationDetails || []
+        // 兼容 lineName 和 line_name (修复“未命名”的关键)
+        lineName: s.lineName || s.line_name || '未知线路',
+        
+        // 兼容 stopsCount 和 stops_count (修复“经过0站”)
+        stopsCount: s.stopsCount !== undefined ? s.stopsCount : (s.stops_count || 0),
+        
+        // 兼容 stationDetails 和 station_details
+        stationDetails: s.stationDetails || s.station_details || []
       }))
     }));
 
@@ -218,77 +239,64 @@ const drawRoute = (route) => {
 
   if (route.segments && route.segments.length) {
     route.segments.forEach((seg, idx) => {
-      const details = seg.stationDetails || [];
+      // 获取站点详情列表，注意兼容
+      const details = seg.stationDetails || seg.station_details || [];
       const segmentPoints = [];
       
-      // 提取坐标点
       details.forEach(s => {
-         if (s.longitude && s.latitude) {
-           segmentPoints.push(new BMap.Point(s.longitude, s.latitude));
+         const lat = s.latitude || s.lat;
+         const lng = s.longitude || s.lng;
+         if (lat && lng) {
+           segmentPoints.push(new BMap.Point(lng, lat));
          }
       });
 
       if (segmentPoints.length > 0) {
-        const color = getLineColor(seg.lineName);
+        // 使用兼容后的 lineName
+        const lineNameStr = seg.lineName || seg.line_name || '线路';
+        const color = getLineColor(lineNameStr);
         
-        // --- 配置方向箭头 ---
-        // 定义箭头符号
-        // BMap_Symbol_SHAPE_BACKWARD_OPEN_ARROW 在折线上通常表现为指向行进方向的箭头
         const sy = new BMap.Symbol(window.BMap_Symbol_SHAPE_BACKWARD_OPEN_ARROW, {
-          scale: 0.6,          // 箭头大小
-          strokeColor: '#fff', // 箭头颜色（白色在深色折线上更明显）
-          strokeWeight: 2,     // 箭头线条粗细
+          scale: 0.6,
+          strokeColor: '#fff',
+          strokeWeight: 2,
         });
-        
-        // 创建图标序列：在折线上每隔 5% 或 10% 的距离绘制一个箭头
         const icons = new BMap.IconSequence(sy, '5%', '5%', false);
 
-        // 绘制折线
         const polyline = new BMap.Polyline(segmentPoints, {
           strokeColor: color,
-          strokeWeight: 6,     // 线宽
-          strokeOpacity: 0.9,  // 透明度
-          icons: [icons]       // 【关键】将箭头配置添加到折线中
+          strokeWeight: 6,
+          strokeOpacity: 0.9,
+          icons: [icons]
         });
         
         mapInstance.addOverlay(polyline);
         allPoints.push(...segmentPoints);
 
-        // 线路名称标注 (中间)
         if (segmentPoints.length > 1) {
           const midPoint = segmentPoints[Math.floor(segmentPoints.length / 2)];
-          const label = new BMap.Label(`${seg.lineName}`, { position: midPoint, offset: new BMap.Size(-10, -20) });
+          const label = new BMap.Label(`${lineNameStr}`, { position: midPoint, offset: new BMap.Size(-10, -20) });
           label.setStyle({
              backgroundColor: color, color: "#fff", border: "none", padding: "2px 5px", borderRadius: "3px", fontSize: "12px",
-             boxShadow: "0 2px 4px rgba(0,0,0,0.2)" // 加点阴影更好看
+             boxShadow: "0 2px 4px rgba(0,0,0,0.2)"
           });
           mapInstance.addOverlay(label);
         }
 
-        // ============================================================
-        // 绘制换乘点并显示具体的站点名称
-        // ============================================================
         if (idx < route.segments.length - 1) {
            const transferP = segmentPoints[segmentPoints.length - 1];
            const tMarker = new BMap.Marker(transferP);
 
-           // 获取该段终点名称作为换乘站名
            let transferName = "换乘";
            if (details.length > 0) {
               const lastS = details[details.length - 1];
-              transferName = getStationName(lastS);
+              transferName = getStationName(lastS); // 使用兼容方法
            }
 
-           // 设置标签：橙色背景 + 白色文字 + 显示站名
            const tLabel = new BMap.Label(`换乘: ${transferName}`, { offset: new BMap.Size(20, -10) });
            tLabel.setStyle({ 
-               color: "#fff", 
-               backgroundColor: "#E65100", // 橙色醒目
-               border: "1px solid #BF360C", 
-               padding: "4px 8px", 
-               borderRadius: "4px",
-               fontWeight: "bold",
-               zIndex: 999,
+               color: "#fff", backgroundColor: "#E65100", border: "1px solid #BF360C", 
+               padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", zIndex: 999,
                boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
            });
            tMarker.setLabel(tLabel);
@@ -299,24 +307,20 @@ const drawRoute = (route) => {
     });
   }
 
-  // 兜底虚线 (用于没有详细路径坐标时连接起终点)
   if (allPoints.length === 0 && startStation.value && endStation.value) {
      if (startStation.value.lng && endStation.value.lng) {
        const p1 = new BMap.Point(startStation.value.lng, startStation.value.lat);
        const p2 = new BMap.Point(endStation.value.lng, endStation.value.lat);
        allPoints.push(p1, p2);
-       // 虚线也可以加箭头，如果需要的话可以把 icons 加进去
        const polyline = new BMap.Polyline([p1, p2], { strokeColor: "blue", style: "dashed", strokeWeight: 4 });
        mapInstance.addOverlay(polyline);
      }
   }
 
-  // 起终点绘制 (深色背景白字) - 保持你原有的逻辑
   if (allPoints.length > 0) {
      const startP = allPoints[0];
      const endP = allPoints[allPoints.length - 1];
      
-     // 起点：深绿
      const startMarker = new BMap.Marker(startP);
      const startLabel = new BMap.Label(`起点: ${startStation.value?.value || '起点'}`, { offset: new BMap.Size(20, -10) });
      startLabel.setStyle({ 
@@ -328,7 +332,6 @@ const drawRoute = (route) => {
      startMarker.setZIndex(1000);
      mapInstance.addOverlay(startMarker);
      
-     // 终点：深红
      const endMarker = new BMap.Marker(endP);
      const endLabel = new BMap.Label(`终点: ${endStation.value?.value || '终点'}`, { offset: new BMap.Size(20, -10) });
      endLabel.setStyle({ 
@@ -346,6 +349,7 @@ const drawRoute = (route) => {
 </script>
 
 <style scoped>
+/* 保持原有样式不变 */
 .query-container { display: flex; height: 100vh; overflow: hidden; }
 .sidebar { 
   width: 400px; 
