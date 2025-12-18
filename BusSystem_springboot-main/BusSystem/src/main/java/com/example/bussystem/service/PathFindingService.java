@@ -192,6 +192,9 @@ public class PathFindingService {
         int totalStops = 0;
         int totalDuration = 0;
 
+        // 获取最终的目的地ID
+        Integer finalDestination = transferPoints.get(transferPoints.size() - 1);
+
         for (int i = 0; i < lines.size(); i++) {
             Integer lid = lines.get(i);
             Integer from = transferPoints.get(i);
@@ -207,6 +210,32 @@ public class PathFindingService {
                 continue;
             }
 
+            // ============================================================
+            // 拒绝“多此一举”的换乘
+            // 如果这不是最后一段路（即我们正准备在这里下车换乘），
+            // 但如果你不下的车，这辆车其实后面就能到终点，那你下车干嘛？-> 废弃
+            // ============================================================
+            if (i < lines.size() - 1) {
+                int idxFinal = fullSeq.indexOf(finalDestination);
+                if (idxFinal != -1) {
+                    // 判断终点是否在当前行驶方向的“前方”
+                    boolean canReachDirectly = false;
+                    if (idxFrom < idxTo) {
+                        // 正向行驶 (1->5)，终点在更后面 (10)，即 idxFinal > idxTo
+                        if (idxFinal > idxTo) canReachDirectly = true;
+                    } else {
+                        // 反向行驶 (5->1)，终点在更后面 (0)，即 idxFinal < idxTo
+                        if (idxFinal < idxTo) canReachDirectly = true;
+                    }
+
+                    if (canReachDirectly) {
+                        // 发现当前线路直达终点，却被安排了中途换乘，视为不合理，丢弃。
+                        return null;
+                    }
+                }
+            }
+            // ============================================================
+
             List<Integer> subList;
             if (idxFrom <= idxTo) {
                 subList = new ArrayList<>(fullSeq.subList(idxFrom, idxTo + 1));
@@ -214,6 +243,21 @@ public class PathFindingService {
                 subList = new ArrayList<>(fullSeq.subList(idxTo, idxFrom + 1));
                 Collections.reverse(subList);
             }
+
+            // ============================================================
+            // 检查是否“坐过站”或“多余换乘”
+            // 如果这一段路径中包含终点站，那么它必须是最后一段，且终点必须是这一段的最后一站。
+            // ============================================================
+            if (subList.contains(finalDestination)) {
+                boolean isLastSegment = (i == lines.size() - 1);
+                Integer lastStationInSegment = subList.get(subList.size() - 1);
+
+                // 如果包含终点，但不是最后一段，或者不是在这一段的末尾下车 -> 说明路过终点没下车 -> 废弃
+                if (!isLastSegment || !lastStationInSegment.equals(finalDestination)) {
+                    return null;
+                }
+            }
+            // ============================================================
 
             Road road = roadMap.get(lid);
             SegmentDTO seg = new SegmentDTO();
@@ -224,8 +268,7 @@ public class PathFindingService {
             seg.setStations(subList);
             seg.setStopsCount(Math.abs(idxTo - idxFrom));
 
-            // [逻辑修改] 填充 stationDetails 供前端地图绘制使用
-            // 必须保留这段，否则前端画不出折线和换乘点名
+            // 填充 stationDetails 供前端地图绘制使用，让前端能画出折线和换乘点名
             List<Station> details = subList.stream()
                     .map(sid -> stationMap.get(sid))
                     .collect(Collectors.toList());
@@ -241,6 +284,7 @@ public class PathFindingService {
         }
         if (segments.isEmpty()) return null;
 
+        // 重新计算换乘次数
         dto.setTransfers(segments.size() - 1);
 
         int transferPenalty = dto.getTransfers() * 10;
