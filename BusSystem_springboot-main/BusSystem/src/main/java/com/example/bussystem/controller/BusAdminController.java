@@ -5,6 +5,7 @@ import com.example.bussystem.service.BusDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -85,23 +86,50 @@ public class BusAdminController {
     }
 
     // ==========================================
-    //               内部辅助方法
+    //                内部辅助方法
     // ==========================================
 
     /**
      * 处理线路的保存逻辑（新增或更新）
-     * 包含健壮的参数类型转换，防止前端传字符串导致的类型错误
      */
     private Map<String, Object> handleLineSave(Map<String, Object> payload, boolean isUpdate) {
         try {
-            // 使用 toString() 再转类型，防止前端传过来的是 String 导致的 ClassCastException
-            Integer lineOrder = Integer.valueOf(payload.get("lineOrder").toString());
-            String lineName = payload.get("lineName").toString();
-            String direction = payload.get("direction").toString();
-            String st = payload.get("st").toString();
-            String ft = payload.get("ft").toString();
-            Integer interval = Integer.valueOf(payload.get("interval").toString());
-            List<Integer> stationIds = (List<Integer>) payload.get("stationIds");
+            // 安全获取参数
+            Integer lineOrder = getInteger(payload, "lineOrder");
+            String lineName = getString(payload, "lineName");
+            String direction = getString(payload, "direction");
+
+            // 兼容 startTime/st 和 finishTime/ft
+            String st = getString(payload, "startTime");
+            if (st == null) st = getString(payload, "st");
+
+            String ft = getString(payload, "finishTime");
+            if (ft == null) ft = getString(payload, "ft");
+
+            // 兼容 interval/intervalTime
+            Integer interval = getInteger(payload, "interval");
+            if (interval == null) interval = getInteger(payload, "intervalTime");
+
+            // 安全转换 List
+            List<Integer> stationIds = new ArrayList<>(); // 建议显示引入 ArrayList
+            Object stationIdsObj = payload.get("stationIds");
+            if (stationIdsObj instanceof List) {
+                for (Object o : (List<?>) stationIdsObj) {
+                    // 修改点：使用 String.valueOf(o) 避免潜在的 toString() 报错
+                    if (o != null) {
+                        try {
+                            stationIds.add(Integer.valueOf(String.valueOf(o)));
+                        } catch (NumberFormatException e) {
+                            // 忽略无法转为数字的项
+                        }
+                    }
+                }
+            }
+
+            // 必填项校验
+            if (lineOrder == null || lineName == null) {
+                return Map.of("success", false, "message", "错误：线路ID或名称不能为空");
+            }
 
             String msg;
             if (isUpdate) {
@@ -110,11 +138,40 @@ public class BusAdminController {
                 msg = dataService.addLine(lineOrder, lineName, direction, st, ft, interval, stationIds);
             }
 
-            boolean success = msg.startsWith("成功");
-            return Map.of("success", success, "message", msg);
+            boolean success = msg != null && msg.startsWith("成功");
+            return Map.of("success", success, "message", msg != null ? msg : "操作失败，未返回消息");
         } catch (Exception e) {
             e.printStackTrace();
-            return Map.of("success", false, "message", "数据格式错误: " + e.getMessage());
+            return Map.of("success", false, "message", "系统异常: " + e.getMessage());
         }
+    }
+
+    // 辅助：安全获取 Integer
+    private Integer getInteger(Map<String, Object> map, String key) {
+        Object val = map.get(key);
+        // 修改点：使用 String.valueOf() 安全转换，并统一处理 null/undefined/空串
+        String strVal = String.valueOf(val);
+
+        // String.valueOf(null) 会返回字符串 "null"，所以要排除
+        if (val == null || "null".equals(strVal) || "undefined".equals(strVal) || strVal.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            return Integer.valueOf(strVal);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    // 辅助：安全获取 String
+    private String getString(Map<String, Object> map, String key) {
+        Object val = map.get(key);
+        if (val == null) return null;
+
+        String strVal = String.valueOf(val);
+        if ("undefined".equals(strVal) || "null".equals(strVal)) return null;
+
+        return strVal;
     }
 }

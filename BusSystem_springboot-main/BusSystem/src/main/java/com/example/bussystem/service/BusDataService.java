@@ -6,9 +6,12 @@ import com.example.bussystem.entity.Station;
 import com.example.bussystem.repository.LineStationRepository;
 import com.example.bussystem.repository.RoadRepository;
 import com.example.bussystem.repository.StationRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.sql.Time;
 import java.util.ArrayList;
@@ -23,6 +26,11 @@ public class BusDataService {
 
     // 注入路径计算服务，用于在数据变更后刷新图结构缓存
     @Autowired private PathFindingService pathFindingService;
+
+    // TODO: 请替换为你申请的百度地图开放平台 Server端 AK
+    private static final String BAIDU_AK = "YOUR_BAIDU_AK_HERE";
+    // 根据提供的SQL文件，默认城市设定为长沙市
+    private static final String DEFAULT_CITY = "长沙市";
 
     // ==========================================
     //               站点管理业务
@@ -67,7 +75,7 @@ public class BusDataService {
         s.setStationId(id);
         s.setStationName(name);
 
-        // 自动补充经纬度信息
+        // 自动获取经纬度信息（百度API -> 随机兜底）
         autoFillCoordinates(s);
 
         stationRepo.save(s);
@@ -106,11 +114,62 @@ public class BusDataService {
         return "成功：站点及其关联线路记录已删除";
     }
 
-    // 辅助方法：模拟自动获取经纬度
-    // 实际项目中此处应调用 百度/高德 地图 API
+    /**
+     * 自动填充经纬度
+     * 逻辑：优先调用百度地图 Geocoding API v3 获取真实坐标。
+     * 如果 API 调用失败（网络异常、配额超限等），则降级使用随机生成策略。
+     */
     private void autoFillCoordinates(Station s) {
-        double baseLng = 120.1550; // 基础经度
-        double baseLat = 30.2740;  // 基础纬度
+        boolean success = false;
+        String address = s.getStationName();
+
+        // 1. 尝试调用百度 API
+        try {
+            // 构建请求 URL
+            String url = String.format("https://api.map.baidu.com/geocoding/v3/?address=%s&city=%s&output=json&ak=%s",
+                    address, DEFAULT_CITY, BAIDU_AK);
+
+            RestTemplate restTemplate = new RestTemplate();
+            String responseBody = restTemplate.getForObject(url, String.class);
+
+            // 解析 JSON
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(responseBody);
+            int status = root.path("status").asInt();
+
+            if (status == 0) {
+                JsonNode location = root.path("result").path("location");
+                double lng = location.path("lng").asDouble();
+                double lat = location.path("lat").asDouble();
+
+                // 保留6位小数，保持格式统一
+                s.setLongitude(Math.round(lng * 1000000.0) / 1000000.0);
+                s.setLatitude(Math.round(lat * 1000000.0) / 1000000.0);
+                success = true;
+                System.out.println("百度地图API调用成功: " + address + " -> (" + lng + ", " + lat + ")");
+            } else {
+                System.err.println("百度地图API返回错误: status=" + status + ", address=" + address);
+            }
+
+        } catch (Exception e) {
+            System.err.println("百度地图API调用异常: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        // 2. 兜底方案：如果 API 获取失败，使用算法伪造坐标
+        if (!success) {
+            System.out.println("启用兜底方案生成随机坐标: " + address);
+            fallbackRandomCoordinates(s);
+        }
+    }
+
+    // 辅助方法：模拟自动获取经纬度 (兜底逻辑)
+    private void fallbackRandomCoordinates(Station s) {
+        // 根据 SQL 数据，长沙大概位于 113.0, 28.2 附近
+        // 原代码是杭州坐标 (120.15, 30.27)，这里修正为长沙以匹配实际城市
+        double baseLng = 112.9800; // 长沙基础经度
+        double baseLat = 28.2000;  // 长沙基础纬度
+
         // 添加随机偏移量以模拟不同位置
         double lng = baseLng + (Math.random() - 0.5) * 0.1;
         double lat = baseLat + (Math.random() - 0.5) * 0.1;

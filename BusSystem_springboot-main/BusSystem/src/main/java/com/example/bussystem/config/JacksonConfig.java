@@ -16,7 +16,9 @@ public class JacksonConfig {
         // 例如：stationId -> station_id (注意：原Python代码是 Station_ID，Spring默认蛇形是小写)
         // 为了完美适配原API的大写字段（Station_ID），我们通常建议在Entity上保留 @JsonProperty
         // 但这个配置能处理大部分常规字段的转换
-        objectMapper.setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+
+        // 使用默认的驼峰命名 (stationId)，避免混淆
+        // objectMapper.setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
         return objectMapper;
     }
 }

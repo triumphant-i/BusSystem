@@ -2,7 +2,6 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -13,9 +12,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://10.83.154.185:8080', // 后端地址
+        // 重要修改：如果你是在同一台电脑上跑前后端，请必须使用 localhost
+        target: 'http://localhost:8080', 
         changeOrigin: true,
-        // rewrite: (path) => path.replace(/^\/api/, '') // 如果后端不需要/api前缀则开启此行，但你的文档里路径本身包含/api，所以不需要rewrite
       }
     }
   }

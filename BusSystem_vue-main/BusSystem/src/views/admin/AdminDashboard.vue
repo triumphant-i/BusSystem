@@ -43,11 +43,24 @@
 
       <el-tab-pane label="线路管理 (Line)" name="lines">
         <div class="toolbar">
+          <el-select v-model="lineSearchMode" style="width: 100px; margin-right: 10px">
+            <el-option label="全部" value="all" />
+            <el-option label="按ID" value="id" />
+            <el-option label="按名称" value="name" />
+          </el-select>
+        
+          <el-input 
+            v-model="lineSearchKeyword" 
+            placeholder="请输入关键字" 
+            style="width: 200px" 
+            clearable
+          />
+          <div style="flex-grow: 1"></div>
           <el-button type="success" @click="openLineDialog('add')">+ 新增线路</el-button>
           <el-button type="default" @click="loadLines" icon="Refresh">刷新</el-button>
         </div>
 
-        <el-table :data="lineList" border stripe style="width: 100%; margin-top: 10px" height="500">
+        <el-table :data="filteredLineList" border stripe style="width: 100%; margin-top: 10px" height="500">
           <el-table-column prop="lineOrder" label="ID" width="80" sortable />
           <el-table-column prop="lineName" label="线路名称" width="120" />
           <el-table-column prop="direction" label="方向" width="80" />
@@ -77,7 +90,7 @@
           <el-input v-model="stationForm.name" placeholder="请输入站点名" />
         </el-form-item>
         <div v-if="stationMode==='add'" style="font-size: 12px; color: gray; margin-left: 80px;">
-          * 经纬度将由系统自动生成
+          * 经纬度将由系统自动调用百度地图API生成
         </div>
       </el-form>
       <template #footer>
@@ -134,10 +147,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { getAllStations, searchStations as apiSearchStations, addStation, updateStation, deleteStation, getAllRoutes, addLine, updateLine, deleteLine } from '@/api/bus';
 import { ElMessage } from 'element-plus';
-
 const activeTab = ref('stations');
 const searchKeyword = ref('');
 
@@ -146,6 +158,7 @@ const stationList = ref([]);
 const stationDialogVisible = ref(false);
 const stationMode = ref('add'); // 'add' or 'edit'
 const stationForm = ref({ id: '', name: '' });
+const lineSearchMode = ref('all'); // 搜索模式：all, id, name
 
 const loadStations = async () => {
   try {
@@ -213,6 +226,25 @@ const lineList = ref([]);
 const lineDialogVisible = ref(false);
 const lineMode = ref('add');
 const lineForm = ref({});
+const lineSearchKeyword = ref(''); // 线路搜索关键字
+
+// 计算属性，用于过滤线路列表
+const filteredLineList = computed(() => {
+  if (!lineSearchKeyword.value) {
+    return lineList.value;
+  }
+  const kw = lineSearchKeyword.value.toLowerCase().trim();
+  const mode = lineSearchMode.value;
+
+  return lineList.value.filter(line => {
+    const idMatch = String(line.lineOrder).includes(kw);
+    const nameMatch = line.lineName && line.lineName.toLowerCase().includes(kw);
+
+    if (mode === 'id') return idMatch; // 仅匹配ID
+    if (mode === 'name') return nameMatch; // 仅匹配名称
+    return idMatch || nameMatch; // 默认全部
+  });
+});
 
 const loadLines = async () => {
   try {
@@ -241,7 +273,7 @@ const openLineDialog = (mode, row) => {
       startTime: row.startTime, 
       finishTime: row.finishTime, 
       intervalTime: row.intervalTime,
-      stationIds: row.stationIds || [] // 如果表格数据里没有，这里需要额外调用接口获取详情
+      stationIds: row.stationIds || [] 
     };
   } else {
     lineForm.value = { lineOrder: '', lineName: '', direction: '上行', startTime: '06:30:00', finishTime: '21:30:00', intervalTime: 10, stationIds: [] };
