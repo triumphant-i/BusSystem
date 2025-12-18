@@ -58,8 +58,8 @@ BusSystem 旨在为用户提供高效的公交换乘方案查询，同时为管�
 
 ### 2. 数据库配置
 1. 创建数据库 `bus`。
-2. 导入项目根目录下的 `exported_data.sql` 文件（如果有）以初始化表结构和数据。
-3. 如果没有 SQL 文件，Spring Boot (JPA) 会在启动时自动创建表结构 (`ddl-auto: update`)。
+2. Spring Boot (JPA) 后端启动时自动创建表结构 (`ddl-auto: update`)。
+3. 导入项目根目录下的 `exported_data.sql` 文件以初始化表的数据。
 
 ### 3. 后端启动
 1. 进入后端目录：
@@ -97,10 +97,7 @@ BusSystem 旨在为用户提供高效的公交换乘方案查询，同时为管�
 
 ## 📂 核心配置说明
 ### 百度地图 AK 配置
-前端地图功能依赖百度地图 AK（Access Key）。 请在 src/views/user/BusQuery.vue 中替换为你自己的 Key（如果当前 Key 失效）：
-```JavaScript
-const mapAK = '你的百度地图AK'; 
-```
+前端地图功能依赖百度地图 AK（Access Key）。 前端启动前，请参照 .env.example 创建 .env.local 文件，并填入你的百度地图 AK。
 
 ### 算法参数
 路径规划的最大换乘次数默认为 1。 可在 BusQueryController.java 中修改默认参数：
