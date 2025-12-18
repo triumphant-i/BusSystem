@@ -103,9 +103,9 @@ const mapAK = '你的百度地图AK';
 ```
 
 ### 算法参数
-路径规划的最大换乘次数默认为 2。 可在 BusQueryController.java 中修改默认参数：
+路径规划的最大换乘次数默认为 1。 可在 BusQueryController.java 中修改默认参数：
 ```Java
-@RequestParam(defaultValue = "2") int maxTransfers
+@RequestParam(defaultValue = "1") int maxTransfers
 ```
 
 ## 📝 API 示例
