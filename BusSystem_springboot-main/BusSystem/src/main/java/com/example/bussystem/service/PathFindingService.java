@@ -186,7 +186,7 @@ public class PathFindingService {
 
     private RouteResultDTO createRoute(List<Integer> lines, List<Integer> transferPoints) {
         RouteResultDTO dto = new RouteResultDTO();
-        dto.setTransfers(lines.size() - 1);
+        // dto.setTransfers(lines.size() - 1);
 
         List<SegmentDTO> segments = new ArrayList<>();
         int totalStops = 0;
@@ -202,6 +202,10 @@ public class PathFindingService {
             int idxTo = fullSeq.indexOf(to);
 
             if (idxFrom == -1 || idxTo == -1) return null;
+
+            if (idxFrom == idxTo) {
+                continue;
+            }
 
             List<Integer> subList;
             if (idxFrom <= idxTo) {
@@ -235,6 +239,9 @@ public class PathFindingService {
             totalStops += seg.getStopsCount();
             totalDuration += segTime;
         }
+        if (segments.isEmpty()) return null;
+
+        dto.setTransfers(segments.size() - 1);
 
         int transferPenalty = dto.getTransfers() * 10;
         dto.setDuration(totalDuration + transferPenalty);
