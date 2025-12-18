@@ -115,13 +115,13 @@ import { searchStations, planRoute } from '@/api/bus';
 import BaiduMap from '@/components/BaiduMap.vue';
 import { ElMessage } from 'element-plus';
 
-const mapAK = '你的百度地图AK'; 
+const mapAK = import.meta.env.VITE_BAIDU_AK;
 const startInput = ref('');
 const endInput = ref('');
 const startStation = ref(null);
 const endStation = ref(null);
 const routes = ref([]);
-const loading = ref(false);
+const loading = ref(false); 
 const searched = ref(false);
 const selectedRouteIndex = ref(-1);
 let mapInstance = null;
@@ -231,12 +231,26 @@ const drawRoute = (route) => {
       if (segmentPoints.length > 0) {
         const color = getLineColor(seg.lineName);
         
+        // --- 配置方向箭头 ---
+        // 定义箭头符号
+        // BMap_Symbol_SHAPE_BACKWARD_OPEN_ARROW 在折线上通常表现为指向行进方向的箭头
+        const sy = new BMap.Symbol(window.BMap_Symbol_SHAPE_BACKWARD_OPEN_ARROW, {
+          scale: 0.6,          // 箭头大小
+          strokeColor: '#fff', // 箭头颜色（白色在深色折线上更明显）
+          strokeWeight: 2,     // 箭头线条粗细
+        });
+        
+        // 创建图标序列：在折线上每隔 5% 或 10% 的距离绘制一个箭头
+        const icons = new BMap.IconSequence(sy, '5%', '5%', false);
+
         // 绘制折线
         const polyline = new BMap.Polyline(segmentPoints, {
           strokeColor: color,
-          strokeWeight: 6,
-          strokeOpacity: 0.9,
+          strokeWeight: 6,     // 线宽
+          strokeOpacity: 0.9,  // 透明度
+          icons: [icons]       // 【关键】将箭头配置添加到折线中
         });
+        
         mapInstance.addOverlay(polyline);
         allPoints.push(...segmentPoints);
 
@@ -245,13 +259,14 @@ const drawRoute = (route) => {
           const midPoint = segmentPoints[Math.floor(segmentPoints.length / 2)];
           const label = new BMap.Label(`${seg.lineName}`, { position: midPoint, offset: new BMap.Size(-10, -20) });
           label.setStyle({
-             backgroundColor: color, color: "#fff", border: "none", padding: "2px 5px", borderRadius: "3px", fontSize: "12px"
+             backgroundColor: color, color: "#fff", border: "none", padding: "2px 5px", borderRadius: "3px", fontSize: "12px",
+             boxShadow: "0 2px 4px rgba(0,0,0,0.2)" // 加点阴影更好看
           });
           mapInstance.addOverlay(label);
         }
 
         // ============================================================
-        // 【关键修改】绘制换乘点并显示具体的站点名称
+        // 绘制换乘点并显示具体的站点名称
         // ============================================================
         if (idx < route.segments.length - 1) {
            const transferP = segmentPoints[segmentPoints.length - 1];
@@ -273,7 +288,8 @@ const drawRoute = (route) => {
                padding: "4px 8px", 
                borderRadius: "4px",
                fontWeight: "bold",
-               zIndex: 999
+               zIndex: 999,
+               boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
            });
            tMarker.setLabel(tLabel);
            tMarker.setZIndex(1000);
@@ -283,18 +299,19 @@ const drawRoute = (route) => {
     });
   }
 
-  // 兜底虚线
+  // 兜底虚线 (用于没有详细路径坐标时连接起终点)
   if (allPoints.length === 0 && startStation.value && endStation.value) {
      if (startStation.value.lng && endStation.value.lng) {
        const p1 = new BMap.Point(startStation.value.lng, startStation.value.lat);
        const p2 = new BMap.Point(endStation.value.lng, endStation.value.lat);
        allPoints.push(p1, p2);
+       // 虚线也可以加箭头，如果需要的话可以把 icons 加进去
        const polyline = new BMap.Polyline([p1, p2], { strokeColor: "blue", style: "dashed", strokeWeight: 4 });
        mapInstance.addOverlay(polyline);
      }
   }
 
-  // 起终点绘制 (深色背景白字)
+  // 起终点绘制 (深色背景白字) - 保持你原有的逻辑
   if (allPoints.length > 0) {
      const startP = allPoints[0];
      const endP = allPoints[allPoints.length - 1];
@@ -304,7 +321,8 @@ const drawRoute = (route) => {
      const startLabel = new BMap.Label(`起点: ${startStation.value?.value || '起点'}`, { offset: new BMap.Size(20, -10) });
      startLabel.setStyle({ 
        color: "#fff", backgroundColor: "#52c41a", border: "1px solid #28a745", 
-       padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", zIndex: 999 
+       padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", zIndex: 999,
+       boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
      });
      startMarker.setLabel(startLabel);
      startMarker.setZIndex(1000);
@@ -315,7 +333,8 @@ const drawRoute = (route) => {
      const endLabel = new BMap.Label(`终点: ${endStation.value?.value || '终点'}`, { offset: new BMap.Size(20, -10) });
      endLabel.setStyle({ 
        color: "#fff", backgroundColor: "#f5222d", border: "1px solid #cf1322", 
-       padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", zIndex: 999 
+       padding: "4px 8px", borderRadius: "4px", fontWeight: "bold", zIndex: 999,
+       boxShadow: "0 2px 4px rgba(0,0,0,0.3)"
      });
      endMarker.setLabel(endLabel);
      endMarker.setZIndex(1000);
