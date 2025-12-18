@@ -67,13 +67,13 @@ BusSystem 旨在为用户提供高效的公交换乘方案查询，同时为管�
    cd BusSystem_springboot-main/BusSystem
    ```
 2. 修改配置文件 src/main/resources/application.yml，配置你的 MySQL 账号密码：
-```YAML
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/bus?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
-    username: root       # 你的数据库账号
-    password: your_password # 你的数据库密码
-```
+    ```YAML
+    spring:
+      datasource:
+        url: jdbc:mysql://localhost:3306/bus?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+        username: root       # 你的数据库账号
+        password: your_password # 你的数据库密码
+    ```
 3. 启动项目：
    使用 IDEA 运行 BusSystemApplication.java。
    或者使用命令行：mvn spring-boot:run。
