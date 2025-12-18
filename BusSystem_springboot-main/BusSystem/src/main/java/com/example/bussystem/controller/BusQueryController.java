@@ -103,7 +103,7 @@ public class BusQueryController {
     public List<RouteResultDTO> planRoute(
             @Parameter(description = "起点（名称或ID）") @RequestParam String start,
             @Parameter(description = "终点（名称或ID）") @RequestParam String end,
-            @Parameter(description = "最大换乘次数") @RequestParam(defaultValue = "2") int maxTransfers) {
+            @Parameter(description = "最大换乘次数") @RequestParam(defaultValue = "1") int maxTransfers) {
         return busService.findRoutes(start, end, maxTransfers);
     }
 }

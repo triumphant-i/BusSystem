@@ -44,5 +44,5 @@ export const deleteLine = (id) => request.delete(`/api/admin/line/${id}`);
 
 // --- 路径规划 ---
 export const planRoute = (start, end) => request.get('/api/routes/plan', {
-  params: { start, end, maxTransfers: 1 }
+  params: { start, end }
 });

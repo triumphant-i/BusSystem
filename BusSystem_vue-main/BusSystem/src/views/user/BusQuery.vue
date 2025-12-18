@@ -115,7 +115,7 @@ import { searchStations, planRoute } from '@/api/bus';
 import BaiduMap from '@/components/BaiduMap.vue';
 import { ElMessage } from 'element-plus';
 
-const mapAK = 'SYQHP6YoaTDqq1EB0FxeIDzQUlWu0IMD'; 
+const mapAK = '你的百度地图AK'; 
 const startInput = ref('');
 const endInput = ref('');
 const startStation = ref(null);
