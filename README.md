@@ -59,7 +59,7 @@ BusSystem 旨在为用户提供高效的公交换乘方案查询，同时为管�
 ### 2. 数据库配置
 1. 创建数据库 `bus`。
 2. Spring Boot (JPA) 后端启动时自动创建表结构 (`ddl-auto: update`)。
-3. 导入项目根目录下的 `exported_data.sql` 文件以初始化表的数据。
+3. 导入项目根目录下的 `bus_system_dump.sql` 文件以初始化表的数据。
 
 ### 3. 后端启动
 1. 进入后端目录：
